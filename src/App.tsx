@@ -1,21 +1,22 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useCallback, useEffect } from "react";
-import { createFetchWithAuth } from "./fetch-with-auth";
-
+import { LogoutButton } from "./LogoutButton";
+import { LoginButton } from "./LoginButton";
+import { logoutParams } from "./logout-params";
+import { UserProfile } from "./UserProfile";
 function App() {
   const {
     isLoading,
     isAuthenticated,
     error,
     user,
-    loginWithRedirect,
     logout,
     getAccessTokenSilently,
   } = useAuth0();
 
   // These function is a dependency of the useEffect below, so we need to memoize it.
   const auth0Logout = useCallback(() => {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    logout(logoutParams);
   }, [logout]);
 
   // Set up a listener for token expiration
@@ -35,29 +36,6 @@ function App() {
     return () => clearInterval(interval);
   }, [getAccessTokenSilently, auth0Logout]);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const fetchWithAuth = createFetchWithAuth(getAccessTokenSilently);
-
-  /**
-   * Usage of the fetchWithAuth function
-   *
-   * fetchWithAuth("http://localhost:3000/api/something", {
-   *   method: "GET",
-   * })
-   *   .then((res) => res.json())
-   *   .then((data) => {
-   *     console.log({ data });
-   *   });
-   */
-
-  /**
-   * Then, Child components would use the following functions:
-   * - fetchWithAuth
-   * - auth0Logout
-   * - loginWithRedirect
-   * - user
-   */
-
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -68,18 +46,12 @@ function App() {
   if (isAuthenticated && user) {
     return (
       <div>
-        Hello {user.name}{" "}
-        <button type="button" onClick={auth0Logout}>
-          Log out
-        </button>
+        Hello {user.name} <LogoutButton />
+        <UserProfile />
       </div>
     );
   }
-  return (
-    <button type="button" onClick={() => loginWithRedirect()}>
-      Log in
-    </button>
-  );
+  return <LoginButton />;
 }
 
 export default App;
