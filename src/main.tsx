@@ -1,17 +1,19 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "./index.css";
-import App from "./App.tsx";
 import { Auth0Provider } from "@auth0/auth0-react";
+import { setupWorker } from "msw/browser";
+import { handlers } from "./mocks/handlers";
 
-const rootElm = document.getElementById("root");
+import App from "./App";
 
-if (!rootElm) {
-  throw new Error("Root element not found");
-}
+const worker = setupWorker(...handlers);
+worker.start().then(() => {
+  const rootElement = document.getElementById("root");
+  if (!rootElement) {
+    throw new Error("Failed to find the root element");
+  }
 
-createRoot(rootElm).render(
-  <StrictMode>
+  const root = createRoot(rootElement);
+  root.render(
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
       clientId={import.meta.env.VITE_AUTH0_CLIENT_ID}
@@ -19,9 +21,9 @@ createRoot(rootElm).render(
         redirect_uri: window.location.origin,
       }}
       useRefreshTokens={true}
-      cacheLocation="localstorage"
+      cacheLocation="localstorage" // Note: This is not the safest option.
     >
       <App />
-    </Auth0Provider>
-  </StrictMode>
-);
+    </Auth0Provider>,
+  );
+});
