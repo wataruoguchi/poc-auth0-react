@@ -1,3 +1,47 @@
+/**
+ * A custom hook that provides authenticated fetch functionality using Auth0.
+ *
+ * @example
+ * ```tsx
+ * // Basic usage with useFetchData
+ * function MyComponent() {
+ *   const { useFetchData } = useFetch();
+ *   const { data, isLoading, error } = useFetchData<User>('/api/user');
+ *
+ *   if (isLoading) return <div>Loading...</div>;
+ *   if (error) return <div>Error: {error.message}</div>;
+ *   return <div>Hello, {data?.name}!</div>;
+ * }
+ *
+ * // Using fetchWithAuth directly
+ * function MyComponent() {
+ *   const { fetchWithAuth } = useFetch();
+ *
+ *   const handleClick = async () => {
+ *     try {
+ *       const response = await fetchWithAuth('/api/data');
+ *       const data = await response.json();
+ *       // Handle data
+ *     } catch (error) {
+ *       // Handle error
+ *     }
+ *   };
+ *
+ *   return <button onClick={handleClick}>Fetch Data</button>;
+ * }
+ *
+ * // Skip authentication for public endpoints
+ * function MyComponent() {
+ *   const { useFetchData } = useFetch();
+ *   const { data } = useFetchData<PublicData>('/api/public', { skipAuth: true });
+ *   // ...
+ * }
+ * ```
+ *
+ * @returns An object containing:
+ *   - `fetchWithAuth`: A function to make authenticated fetch requests
+ *   - `useFetchData`: A hook that handles data fetching with loading and error states
+ */
 import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect, useState } from "react";
 
@@ -12,21 +56,10 @@ type FetchState<T> = {
   error: Error | null;
 };
 
-type FetchFunction = (url: string, options?: FetchOptions) => Promise<Response>;
+export function useFetch() {
+  const { getAccessTokenSilently } = useAuth0();
 
-// Separate auth token provider for better testability
-export const createAuthTokenProvider = (getToken: () => Promise<string>) => ({
-  getToken,
-});
-
-// Separate fetch client for better testability
-export const createFetchClient = (
-  authTokenProvider: ReturnType<typeof createAuthTokenProvider>,
-) => {
-  const fetchWithAuth: FetchFunction = async (
-    url,
-    options: FetchOptions = {},
-  ) => {
+  const fetchWithAuth = async (url: string, options: FetchOptions = {}) => {
     const { skipAuth, ...fetchOptions } = options;
 
     if (skipAuth) {
@@ -34,7 +67,7 @@ export const createFetchClient = (
     }
 
     try {
-      const token = await authTokenProvider.getToken();
+      const token = await getAccessTokenSilently();
       const headers = {
         ...fetchOptions.headers,
         Authorization: `Bearer ${token}`,
@@ -49,15 +82,6 @@ export const createFetchClient = (
       throw error;
     }
   };
-
-  return { fetchWithAuth };
-};
-
-// Hook factory for better testability
-export const createUseFetch = (
-  fetchClient: ReturnType<typeof createFetchClient>,
-) => {
-  const { fetchWithAuth } = fetchClient;
 
   const useFetchData = <T>(url: string, options?: FetchOptions) => {
     const [state, setState] = useState<FetchState<T>>({
@@ -108,12 +132,4 @@ export const createUseFetch = (
     fetchWithAuth,
     useFetchData,
   };
-};
-
-// Production hook using Auth0
-export const useFetch = () => {
-  const { getAccessTokenSilently } = useAuth0();
-  return createUseFetch(
-    createFetchClient(createAuthTokenProvider(getAccessTokenSilently)),
-  );
-};
+}

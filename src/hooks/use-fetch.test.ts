@@ -1,21 +1,46 @@
+import type { Auth0ContextInterface } from "@auth0/auth0-react";
+import { useAuth0 } from "@auth0/auth0-react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createAuthTokenProvider,
-  createFetchClient,
-  createUseFetch,
-} from "./use-fetch";
+import { useFetch } from "./use-fetch";
+
+// Create a complete mock of the Auth0 context
+const createMockAuth0Context = (
+  overrides: Partial<Auth0ContextInterface> = {},
+): Auth0ContextInterface => ({
+  getAccessTokenSilently: vi.fn().mockResolvedValue("test-token"),
+  getAccessTokenWithPopup: vi.fn(),
+  getIdTokenClaims: vi.fn(),
+  loginWithRedirect: vi.fn(),
+  loginWithPopup: vi.fn(),
+  logout: vi.fn(),
+  handleRedirectCallback: vi.fn(),
+  isLoading: false,
+  isAuthenticated: true,
+  user: undefined,
+  error: undefined,
+  ...overrides,
+});
+
+// Mock the Auth0 hook
+vi.mock("@auth0/auth0-react", () => ({
+  useAuth0: vi.fn(),
+}));
 
 // Mock fetch globally
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 describe("useFetch", () => {
-  const mockToken = "test-token";
   const mockResponse = { data: "test" };
 
   beforeEach(() => {
-    mockFetch.mockClear();
+    // Reset all mocks
+    vi.clearAllMocks();
+    // Set up default mock for fetch
+    mockFetch.mockReset();
+    // Set up default mock for Auth0
+    vi.mocked(useAuth0).mockReturnValue(createMockAuth0Context());
   });
 
   afterEach(() => {
@@ -24,12 +49,10 @@ describe("useFetch", () => {
 
   describe("fetchWithAuth", () => {
     it("should add auth header when skipAuth is false", async () => {
-      const mockGetToken = vi.fn().mockResolvedValue(mockToken);
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { fetchWithAuth } = createUseFetch(fetchClient);
-
       mockFetch.mockResolvedValue(new Response());
+
+      const { result } = renderHook(() => useFetch());
+      const { fetchWithAuth } = result.current;
 
       await fetchWithAuth("https://api.example.com");
 
@@ -37,19 +60,17 @@ describe("useFetch", () => {
         "https://api.example.com",
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: `Bearer ${mockToken}`,
+            Authorization: "Bearer test-token",
           }),
         }),
       );
     });
 
     it("should not add auth header when skipAuth is true", async () => {
-      const mockGetToken = vi.fn().mockResolvedValue(mockToken);
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { fetchWithAuth } = createUseFetch(fetchClient);
-
       mockFetch.mockResolvedValue(new Response());
+
+      const { result } = renderHook(() => useFetch());
+      const { fetchWithAuth } = result.current;
 
       await fetchWithAuth("https://api.example.com", { skipAuth: true });
 
@@ -64,10 +85,18 @@ describe("useFetch", () => {
     });
 
     it("should throw error when token fetch fails", async () => {
-      const mockGetToken = vi.fn().mockRejectedValue(new Error("Token error"));
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { fetchWithAuth } = createUseFetch(fetchClient);
+      // Create a new mock context specifically for this test
+      const errorContext = createMockAuth0Context({
+        getAccessTokenSilently: vi
+          .fn()
+          .mockRejectedValue(new Error("Token error")),
+      });
+
+      // Use mockReturnValue instead of mockReturnValueOnce to ensure the mock persists
+      vi.mocked(useAuth0).mockReturnValue(errorContext);
+
+      const { result } = renderHook(() => useFetch());
+      const { fetchWithAuth } = result.current;
 
       await expect(fetchWithAuth("https://api.example.com")).rejects.toThrow(
         "Token error",
@@ -77,18 +106,19 @@ describe("useFetch", () => {
 
   describe("useFetchData", () => {
     it("should handle successful fetch", async () => {
-      const mockGetToken = vi.fn().mockResolvedValue(mockToken);
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { useFetchData } = createUseFetch(fetchClient);
-
+      // Reset mocks specifically for this test
+      mockFetch.mockReset();
       mockFetch.mockResolvedValue(
         new Response(JSON.stringify(mockResponse), { status: 200 }),
       );
 
-      const { result } = renderHook(() =>
-        useFetchData<typeof mockResponse>("https://api.example.com"),
-      );
+      // Ensure we have a fresh Auth0 context for this test
+      vi.mocked(useAuth0).mockReturnValue(createMockAuth0Context());
+
+      const { result } = renderHook(() => {
+        const { useFetchData } = useFetch();
+        return useFetchData<typeof mockResponse>("https://api.example.com");
+      });
 
       expect(result.current.isLoading).toBe(true);
       expect(result.current.error).toBeNull();
@@ -104,17 +134,18 @@ describe("useFetch", () => {
     });
 
     it("should handle fetch error", async () => {
-      const mockGetToken = vi.fn().mockResolvedValue(mockToken);
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { useFetchData } = createUseFetch(fetchClient);
-
+      // Reset mocks specifically for this test
+      mockFetch.mockReset();
       const errorMessage = "Network error";
       mockFetch.mockRejectedValue(new Error(errorMessage));
 
-      const { result } = renderHook(() =>
-        useFetchData("https://api.example.com"),
-      );
+      // Ensure we have a fresh Auth0 context for this test
+      vi.mocked(useAuth0).mockReturnValue(createMockAuth0Context());
+
+      const { result } = renderHook(() => {
+        const { useFetchData } = useFetch();
+        return useFetchData("https://api.example.com");
+      });
 
       expect(result.current.isLoading).toBe(true);
 
@@ -129,18 +160,19 @@ describe("useFetch", () => {
     });
 
     it("should handle non-200 response", async () => {
-      const mockGetToken = vi.fn().mockResolvedValue(mockToken);
-      const authTokenProvider = createAuthTokenProvider(mockGetToken);
-      const fetchClient = createFetchClient(authTokenProvider);
-      const { useFetchData } = createUseFetch(fetchClient);
-
+      // Reset mocks specifically for this test
+      mockFetch.mockReset();
       mockFetch.mockResolvedValue(
         new Response(JSON.stringify({ error: "Not found" }), { status: 404 }),
       );
 
-      const { result } = renderHook(() =>
-        useFetchData("https://api.example.com"),
-      );
+      // Ensure we have a fresh Auth0 context for this test
+      vi.mocked(useAuth0).mockReturnValue(createMockAuth0Context());
+
+      const { result } = renderHook(() => {
+        const { useFetchData } = useFetch();
+        return useFetchData("https://api.example.com");
+      });
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
