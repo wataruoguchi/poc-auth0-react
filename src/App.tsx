@@ -4,6 +4,7 @@ import { LogoutButton } from "./LogoutButton";
 import { LoginButton } from "./LoginButton";
 import { logoutParams } from "./logout-params";
 import { UserProfile } from "./UserProfile";
+import { UserProvider } from "./contexts/user-provider";
 function App() {
   const {
     isLoading,
@@ -46,8 +47,11 @@ function App() {
   if (isAuthenticated && user) {
     return (
       <div>
-        Hello {user.name} <LogoutButton />
-        <UserProfile />
+        <UserProvider>
+          Hello {user.name} <LogoutButton />
+          {/** Components within the UserProvider will have access to the application user context */}
+          <UserProfile />
+        </UserProvider>
       </div>
     );
   }
