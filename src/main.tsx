@@ -1,12 +1,9 @@
 import { createRoot } from "react-dom/client";
 import { Auth0Provider } from "@auth0/auth0-react";
-import { setupWorker } from "msw/browser";
-import { handlers } from "./mocks/handlers";
 
 import App from "./App";
 
-const worker = setupWorker(...handlers);
-worker.start().then(() => {
+mockApisIfDevelopment().then(() => {
   const rootElement = document.getElementById("root");
   if (!rootElement) {
     throw new Error("Failed to find the root element");
@@ -27,3 +24,14 @@ worker.start().then(() => {
     </Auth0Provider>,
   );
 });
+
+async function mockApisIfDevelopment() {
+  const isDevelopment = import.meta.env.MODE === "development";
+  if (isDevelopment) {
+    const { setupWorker } = await import("msw/browser");
+    const { handlers } = await import("./mocks/handlers");
+    const worker = setupWorker(...handlers);
+    return worker.start();
+  }
+  return Promise.resolve();
+}
