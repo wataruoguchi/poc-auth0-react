@@ -30,16 +30,28 @@
  */
 
 import { useEffect, useState } from "react";
-import { useFetch } from "../hooks/use-fetch";
-import { UserContext, type ApplicationUser } from "./user-context";
+import { UserContext } from "./user-context";
+import { z } from "zod";
+import { useAuthQuery } from "../hooks/use-auth-query";
+
+export const ApplicationUserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+});
+// NOTE: It does not depend on Auth0.
+export type ApplicationUser = z.infer<typeof ApplicationUserSchema>;
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { useFetchData } = useFetch();
   const [applicationUser, setApplicationUser] =
     useState<ApplicationUser | null>(null);
 
-  const { data, isLoading, error } = useFetchData<ApplicationUser>(
+  const { data, isLoading, error } = useAuthQuery(
+    ["authUser"],
     "https://api.example.com/user",
+    ApplicationUserSchema,
   );
 
   useEffect(() => {
@@ -59,7 +71,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   if (error) {
     return (
       <div>
-        <div>Error: {error.message}</div>
+        <div data-testid="user-provider-error">Error: {error.message}</div>
       </div>
     );
   }
