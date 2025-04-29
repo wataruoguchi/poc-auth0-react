@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import type { ApplicationUser } from "../contexts/user-context";
+import type { ApplicationUser } from "../contexts/user-provider";
 import { decodeJwt } from "./decode-jwt";
 
 function getUser(email: string): ApplicationUser | null {

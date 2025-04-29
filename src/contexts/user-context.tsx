@@ -1,13 +1,5 @@
 import { createContext, useContext } from "react";
-
-// NOTE: It does not depend on Auth0.
-export type ApplicationUser = {
-  id: string;
-  name: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-};
+import type { ApplicationUser } from "./user-provider";
 
 export type UserContextType = {
   applicationUser: ApplicationUser | null;

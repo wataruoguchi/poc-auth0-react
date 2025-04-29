@@ -11,8 +11,8 @@ import {
 import { UserProvider } from "./user-provider";
 import { useUser } from "./user-context";
 import { setupServer } from "msw/node";
-import { handlers } from "../mocks/handlers";
 import { http, HttpResponse } from "msw";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Mock useAuth0
 vi.mock("@auth0/auth0-react", () => ({
@@ -24,7 +24,7 @@ vi.mock("@auth0/auth0-react", () => ({
 }));
 
 // Setup MSW server
-const server = setupServer(...handlers);
+const server = setupServer();
 
 // Test component that uses the context
 function TestComponent() {
@@ -37,32 +37,52 @@ function TestComponent() {
 }
 
 describe("UserContext", () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        refetchOnWindowFocus: false,
+      },
+    },
+  });
+
   beforeAll(() => server.listen());
-  afterEach(() => server.resetHandlers());
+  afterEach(() => {
+    server.resetHandlers();
+    queryClient.clear();
+  });
   afterAll(() => server.close());
 
   it("should provide user data to children", async () => {
-    render(
-      <UserProvider>
-        <TestComponent />
-      </UserProvider>,
+    const name = "John Maverick";
+    server.use(
+      http.get("https://api.example.com/user", () => {
+        return HttpResponse.json({
+          id: "123",
+          name,
+          email: "john@example.com",
+          firstName: "John",
+          lastName: "Maverick",
+        });
+      }),
     );
+
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <UserProvider>
+          <TestComponent />
+        </UserProvider>
+      </QueryClientProvider>,
+    );
+
+    // Loading
+    expect(screen.getByText("Loading user data...")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByTestId("user-data")).toHaveTextContent(
-        "John Maverick",
-      );
+      expect(screen.getByTestId("user-data")).toHaveTextContent(name);
     });
-  });
 
-  it("should show loading state initially", () => {
-    render(
-      <UserProvider>
-        <TestComponent />
-      </UserProvider>,
-    );
-
-    expect(screen.getByText("Loading user data...")).toBeInTheDocument();
+    unmount();
   });
 
   it("should show error state when API fails", async () => {
@@ -73,17 +93,23 @@ describe("UserContext", () => {
       }),
     );
 
-    render(
-      <UserProvider>
-        <TestComponent />
-      </UserProvider>,
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <UserProvider>
+          <TestComponent />
+        </UserProvider>
+      </QueryClientProvider>,
     );
 
+    // First, we should see the loading state
+    expect(screen.getByText("Loading user data...")).toBeInTheDocument();
+
+    // Then, we should see the error state
     await waitFor(() => {
-      expect(
-        screen.getByText("Error: HTTP error! status: 500"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("user-provider-error")).toBeInTheDocument();
     });
+
+    unmount();
   });
 
   it("should throw error when used outside provider", () => {
